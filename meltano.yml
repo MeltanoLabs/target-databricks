@@ -1,0 +1,77 @@
+version: 1
+send_anonymous_usage_stats: true
+project_id: "target-databricks"
+default_environment: test
+environments:
+- name: test
+plugins:
+  extractors:
+  - name: "tap-smoke-test"
+    namespace: "tap_smoke_test"
+    executable: "tap-smoke-test"
+    pip_url: "git+https://github.com/meltano/tap-smoke-test.git"
+    config:
+      emit_activate_version_messages: true
+      streams:
+      - stream_name: animals
+        "input_filename": "https://gitlab.com/meltano/tap-smoke-test/-/raw/main/demo-data/animals-data.jsonl"
+      - stream_name: page_views
+        "input_filename": "https://gitlab.com/meltano/tap-smoke-test/-/raw/main/demo-data/pageviews-data.jsonl"
+      stream_maps:
+        "animals":
+          "__key_properties__": ["id"]
+        "page_views":
+          "__key_properties__": ["vistor_id"]
+  loaders:
+  - name: "target-databricks"
+    namespace: "target_databricks"
+    pip_url: -e .
+    capabilities:
+    - about
+    - stream-maps
+    - record-flattening
+    config:
+      default_target_schema: smoke_test
+    settings:
+    - name: server_hostname
+      kind: string
+      required: true
+    - name: http_path
+      kind: string
+      required: true
+    - name: auth_type
+      kind: options
+      value: pat
+      options:
+      - label: Personal access token
+        value: pat
+      - label: OAuth M2M (service principal)
+        value: oauth_m2m
+    - name: access_token
+      kind: string
+      sensitive: true
+    - name: client_id
+      kind: string
+    - name: client_secret
+      kind: string
+      sensitive: true
+    - name: catalog
+      kind: string
+    - name: default_target_schema
+      kind: string
+    - name: load_method
+      kind: options
+      value: upsert
+      options:
+      - label: Upsert
+        value: upsert
+      - label: Append only
+        value: append-only
+      - label: Overwrite
+        value: overwrite
+    - name: hard_delete
+      kind: boolean
+      value: false
+    - name: add_record_metadata
+      kind: boolean
+      value: false

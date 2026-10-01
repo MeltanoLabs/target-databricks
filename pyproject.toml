@@ -1,0 +1,126 @@
+[project]
+name = "target-databricks"
+dynamic = [ "version" ]
+description = "`target-databricks` is a Singer target for Databricks, built with the Meltano Singer SDK."
+authors = [{ name = "Meltano" }]
+maintainers = [{ name = "Meltano" }]
+requires-python = ">=3.10"
+readme = "README.md"
+license = "Apache-2.0"
+keywords = [
+    "ELT",
+    "Databricks",
+    "Delta Lake",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+    "singer-sdk~=0.54.7",
+    "databricks-sql-connector>=4",
+    "databricks-sdk>=0.145.0",
+    "typing-extensions>=4.16.0",
+]
+
+[project.scripts]
+target-databricks = "target_databricks.target:TargetDatabricks.cli"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.0",
+    "pre-commit>=4",
+    "pytest>=9",
+    "ruff>=0.15",
+    "singer-sdk[testing]",
+    "tox>=4",
+    "ty>=0.0.61",
+    "types-jsonschema>=4.26.0.20260518",
+]
+
+[tool.uv]
+default-groups = "all"
+override-dependencies = [
+  "singer-sdk[faker]>=0.55.0b2",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [ "target_databricks" ]
+
+[tool.hatch.build.targets.wheel]
+include = [ "target_databricks" ]
+
+[tool.hatch.version]
+fallback-version = "0.0.0dev0"
+source = "vcs"
+
+[build-system]
+requires = [ "hatchling", "hatch-vcs" ]
+build-backend = "hatchling.build"
+
+[tool.ruff.lint]
+ignore = [
+    "CPY001", # Copyright notice
+    "ANN001", # missing-return-type
+    "ANN201",  # missing-return-type-doc
+    "D100", # Missing docstring in public module
+    "D101", # Missing docstring in public class
+    "D102", # Missing docstring in public method
+    "D103", # Missing docstring in public function
+    "D107", # Missing docstring in __init__
+    "D401", # First line should be in imperative mood
+    "D407", # Missing dashed underline after section
+    "FA100", # Forbidden import
+    "S101", # Use of assert detected
+    "G004", # Logging statement uses string formatting
+    "TC002",
+    "TC003",
+    "ANN202",
+    "C901",
+    "D417",
+    "ANN003",
+    "FBT001",
+    "FBT002",
+    "ANN401", # Dynamically typed expressions (Any); record values are untyped
+    "PLR0911", # Too many return statements
+    "COM812", # Conflicts with the formatter
+]
+select = ["ALL"]
+
+[tool.ruff.lint.flake8-annotations]
+allow-star-arg-any = true
+
+[tool.ruff.lint.isort]
+known-first-party = ["target_databricks"]
+
+[tool.ruff.lint.per-file-ignores]
+# Identifiers are always backtick-quoted and values are bound as parameters.
+"target_databricks/sql.py" = [
+    "S608",
+]
+"tests/**/*.py" = [
+    "ANN204",
+    "INP001",
+    "PLR2004", # Magic values are fine in assertions
+    "S608", # Test SQL is built from trusted fixtures
+    "SLF001",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.pylint]
+max-args = 6
+
+[tool.pytest]
+minversion = "9"
+filterwarnings = [
+    "error",
+]
+
+[tool.mypy]
+warn_redundant_casts = true

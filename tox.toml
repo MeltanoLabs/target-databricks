@@ -1,0 +1,24 @@
+requires = [
+    "tox>=4.60",
+    "tox-uv>=1.36",
+]
+env_list = [
+    "lint",
+    { prefix = "3.", start = 10 },
+]
+
+[env_run_base]
+description = "run tests on Python {py_dot_ver}"
+runner = "uv-venv-runner"
+dependency_groups = [ "dev" ]
+commands = [
+    ["pytest", { replace = "posargs", default = [ "tests" ], extend = true } ],
+]
+
+[env.lint]
+description = "lint and format"
+dependency_groups = [ "dev" ]
+commands = [
+    [ "ruff", "check", "--fix" ],
+    [ "ruff", "format" ],
+]
