@@ -11,6 +11,11 @@ env_list = [
 description = "run tests on Python {py_dot_ver}"
 runner = "uv-venv-runner"
 dependency_groups = [ "dev" ]
+pass_env = [
+    "TARGET_DATABRICKS_SERVER_HOSTNAME",
+    "TARGET_DATABRICKS_HTTP_PATH",
+    "TARGET_DATABRICKS_ACCESS_TOKEN",
+]
 commands = [
     ["pytest", { replace = "posargs", default = [ "tests" ], extend = true } ],
 ]
