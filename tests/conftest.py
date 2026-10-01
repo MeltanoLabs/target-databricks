@@ -15,7 +15,6 @@ import dataclasses
 import io
 import logging
 import os
-import sys
 import typing as t
 import uuid
 
@@ -29,25 +28,11 @@ from target_databricks.target import TargetDatabricks
 
 if t.TYPE_CHECKING:
     from collections.abc import Callable, Iterator
-    from importlib.abc import Traversable
+    from importlib.resources.abc import Traversable
 
 
 # The connector logs every Thrift request/response at DEBUG, swamping failures.
 logging.getLogger("databricks").setLevel(logging.WARNING)
-
-
-def pytest_configure(config: pytest.Config):
-    if sys.version_info < (3, 11):
-        config.addinivalue_line(
-            "filterwarnings",
-            "once:Python 3.10 reached its end of life on 2026-10:FutureWarning",
-        )
-
-    elif sys.version_info < (3, 12):
-        config.addinivalue_line(
-            "filterwarnings",
-            "once:Python 3.11 will reach its end of life on 2027-10:FutureWarning",
-        )
 
 
 # Environment variable per setting. Add new required connection settings here.
@@ -132,6 +117,9 @@ def schema(
     catalog = warehouse_config.get("catalog")
     handle = Schema(f"meltano_test_{uuid.uuid4().hex[:8]}", catalog, admin_client)
     admin_client.execute(sql.create_schema_sql(catalog, handle.name))
+    # By default a dropped managed table stays recoverable (and counted against the
+    # metastore's table quota) for 7 days. Disable that for throwaway test tables.
+    admin_client.execute(f"ALTER SCHEMA {handle.qualified} RETAIN DROPPED TO 0 HOURS")
     try:
         yield handle
     finally:

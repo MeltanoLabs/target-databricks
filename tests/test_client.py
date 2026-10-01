@@ -16,7 +16,7 @@ BASE: SingerConfig = {
 
 def test_pat_kwargs():
     kwargs = connect_kwargs({**BASE, "access_token": "tok", "catalog": "main"})
-    assert kwargs["access_token"] == "tok"  # noqa: S105
+    assert kwargs["access_token"] == "tok"  # ruff: ignore[hardcoded-password-string]
     assert kwargs["catalog"] == "main"
     assert kwargs["use_inline_params"] == "silent"
     assert "credentials_provider" not in kwargs

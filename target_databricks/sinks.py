@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import typing as t
+from typing import override
 
 from singer_sdk.sinks import BatchSink
-from typing_extensions import override
 
 from target_databricks import sql
 
 if t.TYPE_CHECKING:
     from singer_sdk.helpers.types import Record
-    from singer_sdk.singerlib.types import KeyProperties
 
     from target_databricks.target import TargetDatabricks
 
@@ -27,7 +26,7 @@ class DatabricksSink(BatchSink):
         target: TargetDatabricks,
         stream_name: str,
         schema: dict,
-        key_properties: KeyProperties | None,
+        key_properties: list[str] | tuple[str, ...] | None,
     ) -> None:
         super().__init__(target, stream_name, schema, key_properties)
         self.client = target.client
@@ -79,7 +78,8 @@ class DatabricksSink(BatchSink):
     def use_merge(self) -> bool:
         return bool(self.key_columns) and self.load_method != "append-only"
 
-    def _conform_record(self, record: Record) -> Record:
+    @staticmethod
+    def _conform_record(record: Record) -> Record:
         return {sql.conform_name(k): v for k, v in record.items()}
 
     def _dedupe(self, rows: list[dict]) -> list[dict]:

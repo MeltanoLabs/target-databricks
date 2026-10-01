@@ -5,9 +5,10 @@ from __future__ import annotations
 import atexit
 import threading
 import typing as t
+from typing import NotRequired
 
 from databricks import sql as dbsql
-from typing_extensions import NotRequired, TypedDict
+from typing_extensions import TypedDict
 
 if t.TYPE_CHECKING:
     from target_databricks.config import SingerConfig
@@ -48,7 +49,7 @@ def connect_kwargs(config: SingerConfig) -> _ConnectKwargs:
 
 def _service_principal_headers(config: SingerConfig) -> t.Any:
     """Build the OAuth M2M header factory (resolves auth, so created lazily)."""
-    from databricks.sdk.core import Config, oauth_service_principal  # noqa: PLC0415
+    from databricks.sdk.core import Config, oauth_service_principal  # ruff: ignore[import-outside-top-level]
 
     return oauth_service_principal(
         Config(

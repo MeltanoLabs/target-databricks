@@ -1,0 +1,58 @@
+preview = true
+
+[lint]
+ignore = [
+    "docstring-missing-returns",
+    "docstring-missing-exception",
+    "missing-copyright-notice",
+    "missing-type-function-argument",
+    "missing-return-type-undocumented-public-function",
+    "undocumented-public-module",
+    "undocumented-public-class",
+    "undocumented-public-method",
+    "undocumented-public-function",
+    "undocumented-public-init",
+    "non-imperative-mood",
+    "missing-dashed-underline-after-section",
+    "future-rewritable-type-annotation",
+    "assert",
+    "logging-f-string",
+    "typing-only-third-party-import",
+    "typing-only-standard-library-import",
+    "missing-return-type-private-function",
+    "complex-structure",
+    "undocumented-param",
+    "missing-type-kwargs",
+    "boolean-type-hint-positional-argument",
+    "boolean-default-value-positional-argument",
+    "any-type",
+    "too-many-return-statements",
+    "missing-trailing-comma",
+]
+select = ["ALL"]
+
+[lint.flake8-annotations]
+allow-star-arg-any = true
+
+[lint.isort]
+known-first-party = ["target_databricks"]
+
+[lint.per-file-ignores]
+# Identifiers are always backtick-quoted and values are bound as parameters.
+"target_databricks/sql.py" = [
+    "hardcoded-sql-expression",
+]
+"tests/**/*.py" = [
+    "missing-return-type-special-method",
+    "docstring-missing-yields",
+    "implicit-namespace-package",
+    "magic-value-comparison",
+    "hardcoded-sql-expression",
+    "private-member-access",
+]
+
+[lint.pydocstyle]
+convention = "google"
+
+[lint.pylint]
+max-args = 6
