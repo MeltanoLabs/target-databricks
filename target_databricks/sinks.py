@@ -10,8 +10,10 @@ from typing_extensions import override
 from target_databricks import sql
 
 if t.TYPE_CHECKING:
+    from singer_sdk.helpers.types import Record
     from singer_sdk.singerlib.types import KeyProperties
-    from singer_sdk.target_base import Target
+
+    from target_databricks.target import TargetDatabricks
 
 CELLS_PER_STATEMENT = 20_000
 """Upper bound on rows x columns inlined into a single statement."""
@@ -22,13 +24,13 @@ class DatabricksSink(BatchSink):
 
     def __init__(
         self,
-        target: Target,
+        target: TargetDatabricks,
         stream_name: str,
         schema: dict,
         key_properties: KeyProperties | None,
     ) -> None:
         super().__init__(target, stream_name, schema, key_properties)
-        self.client = target.client  # ty: ignore[unresolved-attribute]
+        self.client = target.client
 
         parts = stream_name.split("-")
         self.table_name = sql.conform_name(parts[-1])
@@ -77,7 +79,7 @@ class DatabricksSink(BatchSink):
     def use_merge(self) -> bool:
         return bool(self.key_columns) and self.load_method != "append-only"
 
-    def _conform_record(self, record: dict) -> dict:
+    def _conform_record(self, record: Record) -> Record:
         return {sql.conform_name(k): v for k, v in record.items()}
 
     def _dedupe(self, rows: list[dict]) -> list[dict]:
