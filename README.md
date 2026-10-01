@@ -37,9 +37,14 @@ Built-in SDK settings (`add_record_metadata`, `batch_size_rows`, `stream_maps`, 
 
 ```sh
 uv sync
-uv run pytest            # unit tests; live tests skip without credentials
+uv run pytest             # unit tests; live tests skip without credentials
+uv run pytest -n 4        # live tests in parallel (about 2 minutes instead of 5)
 uvx --with tox-uv tox -e lint
 ```
 
-Live tests run when `TARGET_DATABRICKS_SERVER_HOSTNAME`, `TARGET_DATABRICKS_HTTP_PATH` and `TARGET_DATABRICKS_ACCESS_TOKEN`
-(and optionally `TARGET_DATABRICKS_CATALOG`) are set. They create and drop a uniquely named schema.
+Live tests run when `TARGET_DATABRICKS_SERVER_HOSTNAME`, `TARGET_DATABRICKS_HTTP_PATH` and
+`TARGET_DATABRICKS_ACCESS_TOKEN` (and optionally `TARGET_DATABRICKS_CATALOG`) are set; see
+`.env.example`. Each live test gets its own uniquely named schema (the `schema` fixture in
+`tests/conftest.py`), which is dropped afterwards, so tests are safe to run in parallel.
+`tests/test_singer_streams.py` runs the Singer SDK's built-in target test streams this way.
+Speed-up flattens past about 4 workers because the warehouse queues statements.

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest import mock
 
 from target_databricks.client import DatabricksClient, connect_kwargs
 
-BASE = {
+if TYPE_CHECKING:
+    from target_databricks.config import SingerConfig
+
+BASE: SingerConfig = {
     "server_hostname": "h.cloud.databricks.com",
     "http_path": "/sql/1.0/warehouses/x",
 }

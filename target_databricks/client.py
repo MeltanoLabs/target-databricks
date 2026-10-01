@@ -7,18 +7,28 @@ import threading
 import typing as t
 
 from databricks import sql as dbsql
+from typing_extensions import NotRequired, TypedDict
 
 if t.TYPE_CHECKING:
-    from collections.abc import Mapping
-
+    from target_databricks.config import SingerConfig
     from target_databricks.sql import Params
 
 USER_AGENT_ENTRY = "meltano-target-databricks"
 
 
-def connect_kwargs(config: Mapping[str, t.Any]) -> dict[str, t.Any]:
+class _ConnectKwargs(TypedDict, closed=True):
+    server_hostname: str
+    http_path: str
+    use_inline_params: str
+    user_agent_entry: str
+    access_token: NotRequired[str]
+    credentials_provider: NotRequired[t.Callable[[], t.Any]]
+    catalog: NotRequired[str]
+
+
+def connect_kwargs(config: SingerConfig) -> _ConnectKwargs:
     """Build ``databricks.sql.connect`` keyword arguments from target config."""
-    kwargs: dict[str, t.Any] = {
+    kwargs: _ConnectKwargs = {
         "server_hostname": config["server_hostname"],
         "http_path": config["http_path"],
         # Parameters are rendered client-side so that multi-row statements are not
@@ -36,7 +46,7 @@ def connect_kwargs(config: Mapping[str, t.Any]) -> dict[str, t.Any]:
     return kwargs
 
 
-def _service_principal_headers(config: Mapping[str, t.Any]) -> t.Any:
+def _service_principal_headers(config: SingerConfig) -> t.Any:
     """Build the OAuth M2M header factory (resolves auth, so created lazily)."""
     from databricks.sdk.core import Config, oauth_service_principal  # noqa: PLC0415
 
@@ -52,7 +62,7 @@ def _service_principal_headers(config: Mapping[str, t.Any]) -> t.Any:
 class DatabricksClient:
     """Lazily-connected, process-wide Databricks SQL client."""
 
-    def __init__(self, config: Mapping[str, t.Any]) -> None:
+    def __init__(self, config: SingerConfig) -> None:
         self._config = config
         self._connection: t.Any = None
         self._lock = threading.Lock()
