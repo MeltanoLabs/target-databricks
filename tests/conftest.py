@@ -117,6 +117,9 @@ def schema(
     catalog = warehouse_config.get("catalog")
     handle = Schema(f"meltano_test_{uuid.uuid4().hex[:8]}", catalog, admin_client)
     admin_client.execute(sql.create_schema_sql(catalog, handle.name))
+    # By default a dropped managed table stays recoverable (and counted against the
+    # metastore's table quota) for 7 days. Disable that for throwaway test tables.
+    admin_client.execute(f"ALTER SCHEMA {handle.qualified} RETAIN DROPPED TO 0 HOURS")
     try:
         yield handle
     finally:

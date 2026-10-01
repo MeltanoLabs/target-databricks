@@ -18,6 +18,10 @@ concurrency:
 
 env:
   FORCE_COLOR: 1
+  # Only this Python version runs the live warehouse tests. Each run creates dozens of
+  # Unity Catalog tables, and dropped tables keep counting toward the metastore quota
+  # for a while, so running them on every matrix entry exhausts it.
+  LIVE_PYTHON_VERSION: "3.14"
 
 jobs:
   files-changed:
@@ -73,8 +77,14 @@ jobs:
     - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Run
-      # Live tests skip themselves when the secrets are empty (e.g. on fork PRs).
+    - name: Run (unit tests only)
+      if: ${{ matrix.python-version != env.LIVE_PYTHON_VERSION }}
+      env:
+        TOXENV: ${{ matrix.python-version }}
+      run: uvx --with tox-uv tox
+    - name: Run (with live warehouse tests)
+      # Live tests also skip themselves when the secrets are empty (e.g. fork PRs).
+      if: ${{ matrix.python-version == env.LIVE_PYTHON_VERSION }}
       env:
         TARGET_DATABRICKS_SERVER_HOSTNAME: ${{ secrets.TARGET_DATABRICKS_SERVER_HOSTNAME }}
         TARGET_DATABRICKS_HTTP_PATH: ${{ secrets.TARGET_DATABRICKS_HTTP_PATH }}
