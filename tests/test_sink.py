@@ -36,7 +36,7 @@ class FakeClient:
         self.statements.append((statement, params))
         return []
 
-    def table_columns(self, table):  # noqa: ARG002
+    def table_columns(self, table):  # ruff: ignore[unused-method-argument]
         return self.existing
 
 

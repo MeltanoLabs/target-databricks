@@ -1,7 +1,7 @@
-from typing import Any
+from typing import Any, NotRequired
 
 from singer_sdk import typing as th
-from typing_extensions import NotRequired, TypedDict
+from typing_extensions import TypedDict
 
 DEFAULT_AUTH_TYPE = "pat"
 DEFAULT_LOAD_METHOD = "upsert"

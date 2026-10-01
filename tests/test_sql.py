@@ -79,7 +79,7 @@ def test_columns_from_schema_conforms_names():
         (float("nan"), "DOUBLE", None),
         (float("inf"), "DOUBLE", None),
         (
-            datetime.datetime(2024, 1, 2, 3, 4, tzinfo=datetime.timezone.utc),
+            datetime.datetime(2024, 1, 2, 3, 4, tzinfo=datetime.UTC),
             "TIMESTAMP",
             "2024-01-02T03:04:00+00:00",
         ),

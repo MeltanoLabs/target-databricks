@@ -1,0 +1,9 @@
+[build.targets.sdist]
+include = [ "target_databricks", "tests" ]
+
+[build.targets.wheel]
+include = [ "target_databricks" ]
+
+[version]
+fallback-version = "0.0.0dev0"
+source = "vcs"

@@ -1,32 +1,50 @@
 name: Test target-databricks
 
-on: [push]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+  schedule:
+  - cron: "0 12 */7 * *"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 env:
   FORCE_COLOR: 1
 
 jobs:
-  linting:
-    name: Lint
+  files-changed:
     runs-on: ubuntu-latest
+    name: Detect file changes
+    outputs:
+      runtime: ${{ steps.changes.outputs.runtime }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         persist-credentials: false
-    - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-    - name: Run lint command from tox.toml
-      run: |
-        uvx --with tox-uv tox -e lint
+    - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+      id: changes
+      with:
+        filters: |
+          runtime:
+            - 'target_databricks/**'
+            - 'tests/**'
+            - 'pyproject.toml'
+            - 'tox.toml'
+            - '.pytest.toml'
+            - '.github/workflows/ci.yml'
 
   build-package:
     name: Build & verify package
+    needs: files-changed
+    if: ${{ needs.files-changed.outputs.runtime == 'true' }}
     runs-on: ubuntu-latest
     outputs:
       supported-python-versions: ${{ steps.baipp.outputs.supported_python_classifiers_json_array }}
@@ -38,20 +56,16 @@ jobs:
       - uses: hynek/build-and-inspect-python-package@2abe76da66d0a6a4a227101f9348ee855797cfa5 # v3.0.1
         id: baipp
 
-  pytest:
-    name: Tests
+  tests:
+    name: Test
     runs-on: ubuntu-latest
     needs: build-package
     strategy:
+      # The live tests share one SQL warehouse, so don't run Python versions at once.
       max-parallel: 1
       matrix:
         python-version: ${{ fromJson(needs.build-package.outputs.supported-python-versions) }}
-    env:
-      # Live tests are skipped when these are empty (e.g. on forks).
-      TARGET_DATABRICKS_SERVER_HOSTNAME: ${{ secrets.TARGET_DATABRICKS_SERVER_HOSTNAME }}
-      TARGET_DATABRICKS_HTTP_PATH: ${{ secrets.TARGET_DATABRICKS_HTTP_PATH }}
-      TARGET_DATABRICKS_ACCESS_TOKEN: ${{ secrets.TARGET_DATABRICKS_ACCESS_TOKEN }}
-      # TARGET_DATABRICKS_CATALOG: ${{ secrets.TARGET_DATABRICKS_CATALOG }}
+
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
@@ -59,8 +73,55 @@ jobs:
     - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Test
+    - name: Run
+      # Live tests skip themselves when the secrets are empty (e.g. on fork PRs).
       env:
+        TARGET_DATABRICKS_SERVER_HOSTNAME: ${{ secrets.TARGET_DATABRICKS_SERVER_HOSTNAME }}
+        TARGET_DATABRICKS_HTTP_PATH: ${{ secrets.TARGET_DATABRICKS_HTTP_PATH }}
+        TARGET_DATABRICKS_ACCESS_TOKEN: ${{ secrets.TARGET_DATABRICKS_ACCESS_TOKEN }}
+        # TARGET_DATABRICKS_CATALOG: ${{ secrets.TARGET_DATABRICKS_CATALOG }}
         TOXENV: ${{ matrix.python-version }}
-      run: |
-        uvx --with tox-uv tox
+      run: uvx --with tox-uv tox -- tests -n 4
+
+  static:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+    - name: Install tools
+      run: >
+        uv tool install
+        --managed-python
+        --with tox-uv
+        tox
+    - name: Static Analysis
+      run: tox -m check
+
+  pre-commit:
+    name: pre-commit hooks
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+    - run: uvx prek run --show-diff-on-failure --all-files
+
+  ci:
+    name: CI required checks
+    if: always()
+    needs:
+    - build-package
+    - tests
+    - static
+    - pre-commit
+    runs-on: ubuntu-latest
+    steps:
+    - name: Decide whether the needed jobs succeeded or failed
+      uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
+      with:
+        jobs: ${{ toJSON(needs) }}
+        allowed-skips: build-package,tests

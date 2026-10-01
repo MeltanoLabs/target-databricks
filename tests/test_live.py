@@ -57,9 +57,11 @@ def messages(records: list[dict], *, version: int | None = None) -> str:
         ),
     ]
     if version is not None:
-        lines.append(
-            {"type": "ACTIVATE_VERSION", "stream": "people", "version": version}
-        )
+        lines.append({
+            "type": "ACTIVATE_VERSION",
+            "stream": "people",
+            "version": version,
+        })
     return "\n".join(json.dumps(line) for line in lines) + "\n"
 
 

@@ -4,7 +4,8 @@ requires = [
 ]
 env_list = [
     "lint",
-    { prefix = "3.", start = 10 },
+    "typing",
+    { prefix = "3.", start = 13 },
 ]
 
 [env_run_base]
@@ -12,13 +13,20 @@ description = "run tests on Python {py_dot_ver}"
 runner = "uv-venv-runner"
 dependency_groups = [ "dev" ]
 pass_env = [
-    "TARGET_DATABRICKS_SERVER_HOSTNAME",
-    "TARGET_DATABRICKS_HTTP_PATH",
-    "TARGET_DATABRICKS_ACCESS_TOKEN",
+    "TARGET_DATABRICKS_*",
 ]
 commands = [
     ["pytest", { replace = "posargs", default = [ "tests" ], extend = true } ],
 ]
+
+[env.typing]
+description = "type checks"
+dependency_groups = [ "dev" ]
+commands = [
+    ["mypy", { replace = "posargs", default = [ "target_databricks", "tests" ], extend = true } ],
+    ["ty", "check", { replace = "posargs", default = [ "target_databricks", "tests" ], extend = true } ],
+]
+labels = [ "check" ]
 
 [env.lint]
 description = "lint and format"

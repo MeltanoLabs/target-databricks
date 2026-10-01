@@ -29,7 +29,8 @@ plugins:
     capabilities:
     - about
     - stream-maps
-    - record-flattening
+    - schema-flattening
+    python: python3.14
     config:
       default_target_schema: smoke_test
     settings:
