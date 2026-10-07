@@ -64,6 +64,22 @@ def test_setup_creates_schema_and_table():
     ]
 
 
+@pytest.mark.parametrize(
+    ("retention_days", "clause"),
+    [
+        (0, " RETAIN DROPPED FOR 0 HOURS"),
+        (7, " RETAIN DROPPED FOR 7 DAYS"),
+        (30, " RETAIN DROPPED FOR 30 DAYS"),
+        (None, ""),
+    ],
+)
+def test_setup_passes_schema_creation_parameters(retention_days, clause):
+    params = {} if retention_days is None else {"retention_days": retention_days}
+    sink, client = make_sink(config={"schema_creation_parameters": params})
+    sink.setup()
+    assert sqls(client)[0] == f"CREATE SCHEMA IF NOT EXISTS `main`.`raw`{clause}"
+
+
 def test_setup_adds_missing_columns_only():
     sink, client = make_sink(existing={"id": "BIGINT"})
     sink.setup()
