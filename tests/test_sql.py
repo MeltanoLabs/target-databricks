@@ -93,6 +93,10 @@ def test_serialize_value(value, typ, expected):
 def test_ddl():
     cols = {"id": "BIGINT", "name": "STRING"}
     assert sql.create_schema_sql("c", "s") == "CREATE SCHEMA IF NOT EXISTS `c`.`s`"
+    assert (
+        sql.create_schema_sql("c", "s", retain_drop_for="1 hour")
+        == "CREATE SCHEMA IF NOT EXISTS `c`.`s` RETAIN DROPPED FOR 1 HOUR"
+    )
     assert sql.create_table_sql("`s`.`t`", cols) == (
         "CREATE TABLE IF NOT EXISTS `s`.`t` (`id` BIGINT, `name` STRING) USING DELTA"
     )

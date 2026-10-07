@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import typing as t
-from typing import override
+from typing import TYPE_CHECKING, override
 
 from singer_sdk.sinks import BatchSink
 
 from target_databricks import sql
 
-if t.TYPE_CHECKING:
+if TYPE_CHECKING:
     from singer_sdk.helpers.types import Record
 
     from target_databricks.target import TargetDatabricks
@@ -56,7 +55,14 @@ class DatabricksSink(BatchSink):
 
     @override
     def setup(self) -> None:
-        self.client.execute(sql.create_schema_sql(self.catalog, self.schema_name))
+        scp = self.config.get("schema_creation_parameters", {})
+        self.client.execute(
+            sql.create_schema_sql(
+                self.catalog,
+                self.schema_name,
+                retain_drop_for=scp.get("retain_dropped_for"),
+            )
+        )
         existing = self.client.table_columns(self.full_table_name)
         if existing is None:
             self.client.execute(

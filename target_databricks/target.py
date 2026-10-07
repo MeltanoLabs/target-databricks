@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import typing as t
-from typing import cast
+from typing import Any, cast, override
 
 from singer_sdk import Target
 from singer_sdk.exceptions import ConfigValidationError
@@ -22,7 +21,7 @@ class TargetDatabricks(Target):
 
     config_jsonschema = get_config_jsonschema()
 
-    def __init__(self, *args: t.Any, **kwargs: t.Any) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._client: DatabricksClient | None = None
 
@@ -34,6 +33,7 @@ class TargetDatabricks(Target):
             self._client = DatabricksClient(config)
         return self._client
 
+    @override
     def _validate_config(self, *, raise_errors: bool = True) -> list[str]:
         errors = super()._validate_config(raise_errors=False)
         auth_type = self.config.get("auth_type", "pat")

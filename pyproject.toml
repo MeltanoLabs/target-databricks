@@ -1,7 +1,7 @@
 [project]
 name = "target-databricks"
 dynamic = [ "version" ]
-description = "`target-databricks` is a Singer target for Databricks, built with the Meltano Singer SDK."
+description = "Singer target for Databricks, built with the Meltano Singer SDK"
 authors = [{ name = "Meltano" }]
 maintainers = [{ name = "Meltano" }]
 requires-python = ">=3.13"

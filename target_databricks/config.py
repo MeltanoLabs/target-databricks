@@ -10,6 +10,12 @@ DEFAULT_HARD_DELETE = False
 ALLOWED_AUTH_TYPES = ["pat", "oauth_m2m"]
 ALLOWED_LOAD_METHODS = ["upsert", "append-only", "overwrite"]
 
+RETAIN_DROPPED_FOR_PATTERN = r"\d+ (hour|hours|day|days|week|weeks)"
+
+
+class SchemaCreationParameters(TypedDict, closed=True):
+    retain_dropped_for: NotRequired[str]
+
 
 class SingerConfig(TypedDict, closed=False):
     """TypedDict for the target config JSON schema."""
@@ -29,6 +35,7 @@ class SingerConfig(TypedDict, closed=False):
     client_secret: NotRequired[str]
     catalog: NotRequired[str]
     default_target_schema: NotRequired[str]
+    schema_creation_parameters: NotRequired[SchemaCreationParameters]
 
 
 def get_config_jsonschema() -> dict[str, Any]:
@@ -114,6 +121,29 @@ def get_config_jsonschema() -> dict[str, Any]:
             description=(
                 "On `ACTIVATE_VERSION`, delete stale rows instead of marking them "
                 "with `_sdc_deleted_at`."
+            ),
+        ),
+        th.Property(
+            name="schema_creation_parameters",
+            wrapped=th.ObjectType(
+                th.Property(
+                    "retain_dropped_for",
+                    th.StringType(pattern=RETAIN_DROPPED_FOR_PATTERN),
+                    title="Retain Dropped For",
+                    description=(
+                        "Optionally sets the recovery period for dropped managed "
+                        "tables in the schema, the period during which dropped tables "
+                        "can be recovered using the UNDROP TABLE command. If not "
+                        "specified, the schema inherits the recovery period from its "
+                        "parent catalog (default 7 days). The value must be 0 hours "
+                        "(to disable recovery) or between 7-30 days, inclusive."
+                    ),
+                ),
+            ),
+            title="Schema Creation Parameters",
+            description=(
+                "Parameters to use for `CREATE SCHEMA` when the target schema does not "
+                "already exist in the catalog"
             ),
         ),
     ).to_dict()
