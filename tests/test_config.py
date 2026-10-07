@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 
 def test_required_fields():
-    config = {}
+    config: SingerConfig = {}  # type:ignore[typeddict-item] # ty: ignore[missing-typed-dict-key]
     with pytest.raises(ConfigValidationError) as exc_info:
         _ = TargetDatabricks(config=config)
 
