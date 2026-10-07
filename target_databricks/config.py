@@ -10,7 +10,7 @@ DEFAULT_HARD_DELETE = False
 ALLOWED_AUTH_TYPES = ["pat", "oauth_m2m"]
 ALLOWED_LOAD_METHODS = ["upsert", "append-only", "overwrite"]
 
-RETAIN_DROPPED_FOR_PATTERN = r"\d+ (hour|hours|day|days|week|weeks)"
+RETAIN_DROPPED_FOR_PATTERN = r"^\d+ (hour|hours|day|days|week|weeks)$"
 
 
 class SchemaCreationParameters(TypedDict, closed=True):

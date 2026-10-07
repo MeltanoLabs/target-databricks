@@ -26,16 +26,31 @@ def test_retain_dropped_for_pattern():
         "access_token": "value",
         "server_hostname": "h.cloud.databricks.com",
         "http_path": "/sql/1.0/warehouses/x",
-        "schema_creation_parameters": {
-            "retain_dropped_for": "1 month",
-        },
+        "schema_creation_parameters": {},
     }
+
+    def _set(value: str) -> None:
+        nonlocal config
+        config["schema_creation_parameters"]["retain_dropped_for"] = value
+
+    # OK
+    _set("1 hour")
+    _ = TargetDatabricks(config=config)
+
+    # Invalid unit
+    _set("1 month")
     with pytest.raises(ConfigValidationError) as exc_info:
         _ = TargetDatabricks(config=config)
 
     assert set(exc_info.value.errors) == {
-        "'1 month' does not match '\\\\d+ (hour|hours|day|days|week|weeks)' in config['schema_creation_parameters']['retain_dropped_for']"  # ruff: ignore[line-too-long]
+        "'1 month' does not match '^\\\\d+ (hour|hours|day|days|week|weeks)$' in config['schema_creation_parameters']['retain_dropped_for']"  # ruff: ignore[line-too-long]
     }
 
-    config["schema_creation_parameters"]["retain_dropped_for"] = "1 hour"
-    _ = TargetDatabricks(config=config)
+    # SQL injection
+    _set("1 hour; DROP SCHEMA analytics")
+    with pytest.raises(ConfigValidationError) as exc_info:
+        _ = TargetDatabricks(config=config)
+
+    assert set(exc_info.value.errors) == {
+        "'1 hour; DROP SCHEMA analytics' does not match '^\\\\d+ (hour|hours|day|days|week|weeks)$' in config['schema_creation_parameters']['retain_dropped_for']"  # ruff: ignore[line-too-long]
+    }
