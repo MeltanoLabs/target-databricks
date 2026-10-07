@@ -130,7 +130,7 @@ def get_config_jsonschema() -> dict[str, Any]:
                         th.Constant(0),
                         th.IntegerType(minimum=7, maximum=30),
                     ),
-                    title="Schema Retain Days",
+                    title="Schema Retention Days",
                     description=(
                         "Optionally sets the recovery period for dropped managed "
                         "tables in the schema, the period during which dropped tables "
