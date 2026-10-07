@@ -101,8 +101,18 @@ def serialize_value(value: t.Any, sql_type: str) -> t.Any:
     return value
 
 
-def create_schema_sql(catalog: str | None, schema: str) -> str:
-    return f"CREATE SCHEMA IF NOT EXISTS {fq_name(catalog, schema)}"
+def create_schema_sql(
+    catalog: str | None,
+    schema: str,
+    *,
+    retention_days: int | None = None,
+) -> str:
+    ddl = f"CREATE SCHEMA IF NOT EXISTS {fq_name(catalog, schema)}"
+    if retention_days is not None:
+        param = "0 HOURS" if retention_days == 0 else f"{retention_days} DAYS"
+        ddl = f"{ddl} RETAIN DROPPED FOR {param}"
+
+    return ddl
 
 
 def create_table_sql(table: str, columns: Mapping[str, str]) -> str:
