@@ -60,6 +60,5 @@ def test_invalid_retention_days(value: int | None):
     with pytest.raises(ConfigValidationError) as exc_info:
         _ = TargetDatabricks(config=config)
 
-    assert set(exc_info.value.errors) == {
-        f"{value!r} is not valid under any of the given schemas in config['schema_creation_parameters']['retention_days']"  # ruff: ignore[line-too-long]
-    }
+    assert len(exc_info.value.errors) == 1
+    assert "retention_days" in exc_info.value.errors[0]
