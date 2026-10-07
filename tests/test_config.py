@@ -24,11 +24,11 @@ def test_required_fields():
 @pytest.mark.parametrize(
     "value",
     [
-        pytest.param(0, id="Null"),
+        pytest.param(None, id="Null"),
         pytest.param(0, id="0"),
-        pytest.param(0, id="10"),
-        pytest.param(0, id="7 (boundary)"),
-        pytest.param(0, id="30 (boundary)"),
+        pytest.param(10, id="10"),
+        pytest.param(7, id="7 (boundary)"),
+        pytest.param(30, id="30 (boundary)"),
     ],
 )
 def test_valid_retention_days(value: int | None):
