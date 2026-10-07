@@ -12,7 +12,7 @@ ALLOWED_LOAD_METHODS = ["upsert", "append-only", "overwrite"]
 
 
 class SchemaCreationParameters(TypedDict, closed=True):
-    retention_days: int
+    retention_days: NotRequired[int | None]
 
 
 class SingerConfig(TypedDict, closed=False):

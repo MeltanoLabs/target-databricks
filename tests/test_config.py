@@ -21,31 +21,45 @@ def test_required_fields():
     }
 
 
-def test_retain_dropped_for_pattern():
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param(0, id="Null"),
+        pytest.param(0, id="0"),
+        pytest.param(0, id="10"),
+        pytest.param(0, id="7 (boundary)"),
+        pytest.param(0, id="30 (boundary)"),
+    ],
+)
+def test_valid_retention_days(value: int | None):
     config: SingerConfig = {
         "access_token": "value",
         "server_hostname": "h.cloud.databricks.com",
         "http_path": "/sql/1.0/warehouses/x",
-        "schema_creation_parameters": {},
+        "schema_creation_parameters": {"retention_days": value},
     }
 
-    def _set(value: int) -> None:
-        nonlocal config
-        config["schema_creation_parameters"]["retention_days"] = value
-
-    # OK
-    _set(10)
     _ = TargetDatabricks(config=config)
 
-    # Disable OK
-    _set(0)
-    _ = TargetDatabricks(config=config)
 
-    # Outside range
-    _set(31)
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param(5, id="Below range"),
+        pytest.param(31, id="Above range"),
+        pytest.param("2 weeks", id="Not an integer"),
+    ],
+)
+def test_invalid_retention_days(value: int | None):
+    config: SingerConfig = {
+        "access_token": "value",
+        "server_hostname": "h.cloud.databricks.com",
+        "http_path": "/sql/1.0/warehouses/x",
+        "schema_creation_parameters": {"retention_days": value},
+    }
     with pytest.raises(ConfigValidationError) as exc_info:
         _ = TargetDatabricks(config=config)
 
     assert set(exc_info.value.errors) == {
-        "31 is not valid under any of the given schemas in config['schema_creation_parameters']['retention_days']"  # ruff: ignore[line-too-long]
+        f"{value!r} is not valid under any of the given schemas in config['schema_creation_parameters']['retention_days']"  # ruff: ignore[line-too-long]
     }
