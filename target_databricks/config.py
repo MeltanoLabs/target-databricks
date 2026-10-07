@@ -10,11 +10,9 @@ DEFAULT_HARD_DELETE = False
 ALLOWED_AUTH_TYPES = ["pat", "oauth_m2m"]
 ALLOWED_LOAD_METHODS = ["upsert", "append-only", "overwrite"]
 
-RETAIN_DROPPED_FOR_PATTERN = r"^\d+ (hour|hours|day|days|week|weeks)$"
-
 
 class SchemaCreationParameters(TypedDict, closed=True):
-    retain_dropped_for: NotRequired[str]
+    retention_days: int
 
 
 class SingerConfig(TypedDict, closed=False):
@@ -127,16 +125,19 @@ def get_config_jsonschema() -> dict[str, Any]:
             name="schema_creation_parameters",
             wrapped=th.ObjectType(
                 th.Property(
-                    "retain_dropped_for",
-                    th.StringType(pattern=RETAIN_DROPPED_FOR_PATTERN),
-                    title="Retain Dropped For",
+                    "retention_days",
+                    th.OneOf(
+                        th.Constant(0),
+                        th.IntegerType(minimum=7, maximum=30),
+                    ),
+                    title="Schema Retain Days",
                     description=(
                         "Optionally sets the recovery period for dropped managed "
                         "tables in the schema, the period during which dropped tables "
                         "can be recovered using the UNDROP TABLE command. If not "
                         "specified, the schema inherits the recovery period from its "
-                        "parent catalog (default 7 days). The value must be 0 hours "
-                        "(to disable recovery) or between 7-30 days, inclusive."
+                        "parent catalog (default 7 days). Set the value to 0 to "
+                        "disable recovery, or between 7-30 days, inclusive."
                     ),
                 ),
             ),

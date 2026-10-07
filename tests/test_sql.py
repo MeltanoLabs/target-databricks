@@ -94,8 +94,12 @@ def test_ddl():
     cols = {"id": "BIGINT", "name": "STRING"}
     assert sql.create_schema_sql("c", "s") == "CREATE SCHEMA IF NOT EXISTS `c`.`s`"
     assert (
-        sql.create_schema_sql("c", "s", retain_drop_for="1 hour")
-        == "CREATE SCHEMA IF NOT EXISTS `c`.`s` RETAIN DROPPED FOR 1 HOUR"
+        sql.create_schema_sql("c", "s", retention_days=10)
+        == "CREATE SCHEMA IF NOT EXISTS `c`.`s` RETAIN DROPPED FOR 10 DAYS"
+    )
+    assert (
+        sql.create_schema_sql("c", "s", retention_days=0)
+        == "CREATE SCHEMA IF NOT EXISTS `c`.`s` RETAIN DROPPED FOR 0 HOURS"
     )
     assert sql.create_table_sql("`s`.`t`", cols) == (
         "CREATE TABLE IF NOT EXISTS `s`.`t` (`id` BIGINT, `name` STRING) USING DELTA"

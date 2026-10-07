@@ -60,7 +60,7 @@ class DatabricksSink(BatchSink):
             sql.create_schema_sql(
                 self.catalog,
                 self.schema_name,
-                retain_drop_for=scp.get("retain_dropped_for"),
+                retention_days=scp.get("retention_days"),
             )
         )
         existing = self.client.table_columns(self.full_table_name)

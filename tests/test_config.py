@@ -29,28 +29,23 @@ def test_retain_dropped_for_pattern():
         "schema_creation_parameters": {},
     }
 
-    def _set(value: str) -> None:
+    def _set(value: int) -> None:
         nonlocal config
-        config["schema_creation_parameters"]["retain_dropped_for"] = value
+        config["schema_creation_parameters"]["retention_days"] = value
 
     # OK
-    _set("1 hour")
+    _set(10)
     _ = TargetDatabricks(config=config)
 
-    # Invalid unit
-    _set("1 month")
+    # Disable OK
+    _set(0)
+    _ = TargetDatabricks(config=config)
+
+    # Outside range
+    _set(31)
     with pytest.raises(ConfigValidationError) as exc_info:
         _ = TargetDatabricks(config=config)
 
     assert set(exc_info.value.errors) == {
-        "'1 month' does not match '^\\\\d+ (hour|hours|day|days|week|weeks)$' in config['schema_creation_parameters']['retain_dropped_for']"  # ruff: ignore[line-too-long]
-    }
-
-    # SQL injection
-    _set("1 hour; DROP SCHEMA analytics")
-    with pytest.raises(ConfigValidationError) as exc_info:
-        _ = TargetDatabricks(config=config)
-
-    assert set(exc_info.value.errors) == {
-        "'1 hour; DROP SCHEMA analytics' does not match '^\\\\d+ (hour|hours|day|days|week|weeks)$' in config['schema_creation_parameters']['retain_dropped_for']"  # ruff: ignore[line-too-long]
+        "31 is not valid under any of the given schemas in config['schema_creation_parameters']['retention_days']"  # ruff: ignore[line-too-long]
     }
