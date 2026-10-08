@@ -81,6 +81,7 @@ class FakeClient:
     def __init__(self, tmp_path: Path, *, fail_put: bool = False):
         self.staging_dir = str(tmp_path)
         self.fail_put = fail_put
+        self.put_attempts = 0
         self.overwritten_tables: set[str] = set()
         self.statements: list[tuple[str, dict | None]] = []
 
@@ -88,6 +89,8 @@ class FakeClient:
         return "main"
 
     def execute(self, statement, params=None):
+        if statement.startswith("PUT"):
+            self.put_attempts += 1
         if self.fail_put and statement.startswith("PUT"):
             msg = "no volume access"
             raise RuntimeError(msg)
@@ -193,3 +196,90 @@ def test_non_arrow_encodings_use_the_sdk(tmp_path):
     ) as sdk_impl:
         sink.process_batch_files(jsonl, ["file:///x.jsonl"])
     sdk_impl.assert_called_once_with(jsonl, ["file:///x.jsonl"])
+
+
+def test_table_from_rows_coerces_values_like_the_inline_path():
+    columns = {
+        "id": sql.BIGINT,
+        "ok": sql.BOOLEAN,
+        "score": sql.DOUBLE,
+        "tags": sql.STRING,
+        "created": sql.TIMESTAMP,
+    }
+    created = datetime.datetime(2024, 1, 2, tzinfo=datetime.UTC)
+    rows: list[dict] = [
+        {"id": 1, "ok": True, "score": 1.5, "tags": ["a"], "created": created},
+        {"id": 2, "score": float("nan")},
+    ]
+    out = arrow.table_from_rows(rows, columns)
+    assert out.schema.types == [
+        pa.int64(),
+        pa.bool_(),
+        pa.float64(),
+        pa.string(),
+        pa.string(),
+    ]
+    assert out.to_pydict() == {
+        "id": [1, 2],
+        "ok": [True, None],
+        "score": [1.5, None],
+        "tags": ['["a"]', None],
+        "created": [created.isoformat(), None],
+    }
+
+
+def records(n: int) -> dict:
+    return {"records": [{"id": i, "name": f"n{i}"} for i in range(n)]}
+
+
+def test_large_record_batch_is_staged(tmp_path, monkeypatch):
+    monkeypatch.setattr("target_databricks.sinks.STAGING_MIN_ROWS", 3)
+    sink, client = make_sink(tmp_path)
+
+    sink.process_batch(records(5))
+
+    kinds = [s.split(" ", 1)[0] for s, _ in client.statements]
+    assert kinds == ["CREATE", "PUT", "MERGE", "REMOVE"]
+    assert all(params is None for _, params in client.statements)
+
+
+def test_small_record_batch_is_inlined(tmp_path, monkeypatch):
+    monkeypatch.setattr("target_databricks.sinks.STAGING_MIN_ROWS", 10)
+    sink, client = make_sink(tmp_path)
+
+    sink.process_batch(records(5))
+
+    ((statement, params),) = client.statements
+    assert statement.startswith("MERGE INTO")
+    assert params
+
+
+def test_staging_failure_disables_staging_for_later_batches(tmp_path, monkeypatch):
+    monkeypatch.setattr("target_databricks.sinks.STAGING_MIN_ROWS", 3)
+    sink, client = make_sink(tmp_path, fail_put=True)
+
+    sink.process_batch(records(5))
+    sink.process_batch(records(5))
+
+    assert client.put_attempts == 1  # the second batch does not retry staging
+    inlined = [s for s, p in client.statements if s.startswith("MERGE") and p]
+    assert len(inlined) == 2  # both batches were inlined instead
+    assert sink._staging_disabled
+
+
+def test_staged_record_batch_dedupes_keys(tmp_path, monkeypatch):
+    monkeypatch.setattr("target_databricks.sinks.STAGING_MIN_ROWS", 1)
+    sink, client = make_sink(tmp_path)
+    staged_rows = []
+    stage = sink._stage
+
+    def spy(table):
+        staged_rows.append(table.to_pydict())
+        return stage(table)
+
+    monkeypatch.setattr(sink, "_stage", spy)
+
+    sink.process_batch({"records": [{"id": 1, "name": "a"}, {"id": 1, "name": "b"}]})
+
+    assert staged_rows == [{"id": [1], "name": ["b"]}]
+    assert any(s.startswith("MERGE") for s, _ in client.statements)
