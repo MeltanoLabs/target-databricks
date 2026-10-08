@@ -24,11 +24,23 @@ CELLS_PER_STATEMENT = 20_000
 """Upper bound on rows x columns inlined into a single statement."""
 
 STAGING_VOLUME = "meltano_staging"
-"""Volume (created on demand in the target schema) that Arrow batches are staged in."""
+"""Volume (created on demand in the target schema) that batches are staged in."""
+
+STAGING_MIN_ROWS = 2_000
+"""Record batches smaller than this are inlined: staging has a fixed cost of seconds."""
 
 
 class DatabricksSink(BatchSink):
-    """Loads records into a Delta table using ``INSERT`` or ``MERGE``."""
+    """Loads records into a Delta table using ``INSERT`` or ``MERGE``.
+
+    Batches are staged as Parquet in a Unity Catalog volume and read by a single
+    statement. Databricks analyzes every literal of an inlined ``VALUES`` clause
+    (about 1.6 ms per row however the rows are grouped), so that path is kept only for
+    small batches and as a fallback when staging is not possible.
+    """
+
+    MAX_SIZE_DEFAULT = 100_000
+    """Rows per batch; staging costs seconds per batch, so batches are large."""
 
     def __init__(
         self,
@@ -63,6 +75,7 @@ class DatabricksSink(BatchSink):
         self.key_columns = [sql.conform_name(k) for k in self.key_properties]
         self.load_method: str = self.config.get("load_method", "upsert")
         self._staging_volume_ready = False
+        self._staging_disabled = False
 
     @override
     def setup(self) -> None:
@@ -113,6 +126,14 @@ class DatabricksSink(BatchSink):
         if self.use_merge:
             rows = self._dedupe(rows)
 
+        if len(rows) >= STAGING_MIN_ROWS and self._load_staged(
+            arrow.table_from_rows(rows, self.columns),
+        ):
+            return
+        self._insert_rows(rows)
+
+    def _insert_rows(self, rows: list[dict]) -> None:
+        """Load conformed rows with ``INSERT``/``MERGE`` statements that inline them."""
         chunk = max(1, CELLS_PER_STATEMENT // len(self.columns))
         for start in range(0, len(rows), chunk):
             batch = rows[start : start + chunk]
@@ -168,18 +189,28 @@ class DatabricksSink(BatchSink):
             table = deduped
         if not table.num_rows:
             return
+        if not self._load_staged(table):
+            self._insert_rows(table.to_pylist())
 
+    def _load_staged(self, table: pa.Table) -> bool:
+        """Stage ``table`` in the volume and load it; ``False`` if it can't be staged.
+
+        Only staging failures return ``False`` (the caller then inlines the rows). A
+        failure of the load statement itself propagates.
+        """
+        if self._staging_disabled:
+            return False
         try:
             remote_path = self._stage(table)
         except Exception:
+            self._staging_disabled = True
             self.logger.warning(
-                "Could not stage Arrow batch in volume '%s'; falling back to "
-                "inline inserts.",
+                "Could not stage batch in volume '%s'; falling back to inline "
+                "inserts for the rest of the run.",
                 STAGING_VOLUME,
                 exc_info=True,
             )
-            self.process_batch({"records": table.to_pylist()})
-            return
+            return False
 
         try:
             if self.use_merge:
@@ -201,6 +232,7 @@ class DatabricksSink(BatchSink):
                 self.client.execute(sql.remove_sql(remote_path))
             except Exception:
                 self.logger.debug("Could not remove %s", remote_path, exc_info=True)
+        return True
 
     def _stage(self, table: pa.Table) -> str:
         """Upload ``table`` as a Parquet file to the staging volume; return its path."""

@@ -163,3 +163,21 @@ def test_arrow_batch_is_appended_without_keys(run_singer, schema, tmp_path):
     run_singer(arrow_messages(tmp_path / "p.arrow", table, keys=[]))
 
     assert schema.rows("people", "count(*)") == [(2,)]
+
+
+def test_staged_record_batches_match_inline_loading(run_singer, schema, monkeypatch):
+    """Records loaded through the volume must read back like inlined ones."""
+    monkeypatch.setattr("target_databricks.sinks.STAGING_MIN_ROWS", 1)
+    run_singer(messages([ANN, BOB]))
+    run_singer(messages([ANN, BOB, CY, {"id": 1, "name": "ann2"}]))  # upsert
+
+    rows = schema.rows(
+        "people",
+        "id, name, score, active, tags, year(created)",
+        order_by="id",
+    )
+    assert rows == [
+        (1, "ann2", None, None, None, None),
+        (2, "bob", None, False, None, None),
+        (3, "cy", 3.0, None, "[]", None),
+    ]

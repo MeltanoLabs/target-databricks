@@ -40,6 +40,37 @@ def read_arrow_file(path: str) -> pa.Table:
             return stream_reader.read_all()
 
 
+_ARROW_TYPES: dict[str, pa.DataType] = {
+    sql.STRING: pa.string(),
+    sql.BIGINT: pa.int64(),
+    sql.DOUBLE: pa.float64(),
+    sql.BOOLEAN: pa.bool_(),
+    # Dates and timestamps travel as ISO strings and are cast by the load statement,
+    # exactly like the inline path does.
+    sql.DATE: pa.string(),
+    sql.TIMESTAMP: pa.string(),
+}
+
+
+def table_from_rows(
+    rows: Sequence[Mapping[str, t.Any]],
+    columns: Mapping[str, str],
+) -> pa.Table:
+    """Build a typed table from conformed records, one column per sink column.
+
+    Values are coerced with :func:`sql.serialize_value`, so records load the same
+    values whether they are inlined into a statement or staged as Parquet.
+    """
+    arrays = [
+        pa.array(
+            [sql.serialize_value(row.get(name), sql_type) for row in rows],
+            type=_ARROW_TYPES[sql_type],
+        )
+        for name, sql_type in columns.items()
+    ]
+    return pa.table(arrays, names=list(columns))
+
+
 def _is_nested(arrow_type: pa.DataType) -> bool:
     if pa.types.is_dictionary(arrow_type):
         return pa.types.is_nested(arrow_type.value_type)

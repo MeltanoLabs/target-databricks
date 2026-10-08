@@ -32,14 +32,18 @@ Built-in SDK settings (`add_record_metadata`, `batch_size_rows`, `stream_maps`, 
   JSON strings) and new columns are added automatically. Existing column types are not altered.
 - With key properties, `upsert` uses a native `MERGE INTO`; without them, or with
   `append-only`, rows are inserted. `overwrite` truncates each table once per run.
+- Record batches of at least 2,000 rows (and Arrow `BATCH` files, below) are written as Parquet,
+  uploaded with `PUT` to a Unity Catalog volume named `meltano_staging` (created in the target schema
+  if missing, so the principal needs `CREATE VOLUME` and `WRITE VOLUME`) and loaded with a single
+  `INSERT` or `MERGE ... FROM parquet.<path>`. Databricks analyzes every literal in an inlined
+  `VALUES` clause (about 1.6 ms per row), which capped inline loading near 600 rows/s however the rows
+  were grouped; staging has a fixed cost of a few seconds per batch, so the default `batch_size_rows`
+  is 100,000 (lower it if your records are very wide). Smaller batches, and everything when staging
+  fails (for example without volume permissions; this is logged once), use inline statements.
 - `BATCH` messages with `encoding: {"format": "arrow"}` (Arrow IPC files, `file://` URIs or local
   paths) are detected automatically; no setting is needed. Table DDL still comes from the
-  `SCHEMA` message. Each file is written as Parquet, uploaded with `PUT` to a Unity Catalog volume
-  named `meltano_staging` (created in the target schema if missing, so the principal needs
-  `CREATE VOLUME` and `WRITE VOLUME`), and loaded with a single `INSERT` or `MERGE ... FROM
-  parquet.<path>`; the staged file is removed afterwards. If staging fails, the batch is loaded
-  with inline inserts instead. Manifest files are consume-once and deleted after loading unless
-  `clean_up_batch_files` is `false`.
+  `SCHEMA` message. Each file is staged and loaded as described above. Manifest files are
+  consume-once and deleted after loading unless `clean_up_batch_files` is `false`.
 
 ## Development
 
