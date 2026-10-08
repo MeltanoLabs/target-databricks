@@ -2,19 +2,29 @@
 
 from __future__ import annotations
 
+import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING, override
 
+import pyarrow.parquet as pq
 from singer_sdk.sinks import BatchSink
 
-from target_databricks import sql
+from target_databricks import arrow, sql
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    import pyarrow as pa
+    from singer_sdk.helpers._batch import BaseBatchFileEncoding
     from singer_sdk.helpers.types import Record
 
     from target_databricks.target import TargetDatabricks
 
 CELLS_PER_STATEMENT = 20_000
 """Upper bound on rows x columns inlined into a single statement."""
+
+STAGING_VOLUME = "meltano_staging"
+"""Volume (created on demand in the target schema) that Arrow batches are staged in."""
 
 
 class DatabricksSink(BatchSink):
@@ -52,6 +62,7 @@ class DatabricksSink(BatchSink):
         self.columns = sql.columns_from_schema(self.schema)
         self.key_columns = [sql.conform_name(k) for k in self.key_properties]
         self.load_method: str = self.config.get("load_method", "upsert")
+        self._staging_volume_ready = False
 
     @override
     def setup(self) -> None:
@@ -120,6 +131,106 @@ class DatabricksSink(BatchSink):
                 )
             self.client.execute(statement, params)
 
+    def _flush(self) -> None:
+        """Process the buffered records, if any, so later work lands after them."""
+        if self.current_size:
+            context = self.start_drain()
+            with self.batch_processing_timer:
+                self.process_batch(context)
+            self.mark_drained()
+
+    @override
+    def process_batch_files(
+        self,
+        encoding: BaseBatchFileEncoding,
+        files: Sequence[str],
+    ) -> None:
+        if encoding.format != arrow.ARROW_ENCODING_FORMAT:
+            super().process_batch_files(encoding, files)
+            return
+
+        self._flush()
+        for file_uri in files:
+            path = Path(arrow.resolve_manifest_path(file_uri))
+            table = arrow.read_arrow_file(str(path))
+            self.record_counter_metric.increment(table.num_rows)
+            self._load_arrow_table(table)
+            # Manifest files are consume-once: nothing else reads them again.
+            if self.config.get("clean_up_batch_files", True):
+                path.unlink(missing_ok=True)
+
+    def _load_arrow_table(self, table: pa.Table) -> None:
+        """Load a table by staging it as Parquet in a volume and reading it in SQL."""
+        table = arrow.conform_table(table, self.columns)
+        if self.use_merge and table.num_rows:
+            deduped = arrow.dedupe_table(table, self.key_columns)
+            self.tally_duplicate_merged(table.num_rows - deduped.num_rows)
+            table = deduped
+        if not table.num_rows:
+            return
+
+        try:
+            remote_path = self._stage(table)
+        except Exception:
+            self.logger.warning(
+                "Could not stage Arrow batch in volume '%s'; falling back to "
+                "inline inserts.",
+                STAGING_VOLUME,
+                exc_info=True,
+            )
+            self.process_batch({"records": table.to_pylist()})
+            return
+
+        try:
+            if self.use_merge:
+                statement = sql.merge_staged_sql(
+                    self.full_table_name,
+                    self.columns,
+                    self.key_columns,
+                    remote_path,
+                )
+            else:
+                statement = sql.insert_staged_sql(
+                    self.full_table_name,
+                    self.columns,
+                    remote_path,
+                )
+            self.client.execute(statement)
+        finally:
+            try:
+                self.client.execute(sql.remove_sql(remote_path))
+            except Exception:
+                self.logger.debug("Could not remove %s", remote_path, exc_info=True)
+
+    def _stage(self, table: pa.Table) -> str:
+        """Upload ``table`` as a Parquet file to the staging volume; return its path."""
+        if not self._staging_volume_ready:
+            self.client.execute(
+                sql.create_volume_sql(self.catalog, self.schema_name, STAGING_VOLUME),
+            )
+            self._staging_volume_ready = True
+
+        filename = f"{uuid.uuid4().hex}.parquet"
+        local_path = Path(self.client.staging_dir) / filename
+        remote_path = sql.volume_path(
+            self.client.current_catalog(),
+            self.schema_name,
+            STAGING_VOLUME,
+            filename,
+        )
+        # Spark has no nanosecond timestamps.
+        pq.write_table(
+            table,
+            local_path,
+            coerce_timestamps="us",
+            allow_truncated_timestamps=True,
+        )
+        try:
+            self.client.execute(sql.put_sql(str(local_path), remote_path))
+        finally:
+            local_path.unlink(missing_ok=True)
+        return remote_path
+
     @override
     def activate_version(self, new_version: int) -> None:
         if not self.include_sdc_metadata_properties:
@@ -130,11 +241,7 @@ class DatabricksSink(BatchSink):
             )
             return
 
-        if self.current_size:  # flush buffered rows before changing versions
-            context = self.start_drain()
-            with self.batch_processing_timer:
-                self.process_batch(context)
-            self.mark_drained()
+        self._flush()  # buffered rows must land before changing versions
 
         if self.config.get("hard_delete", False):
             statement = sql.hard_delete_sql(self.full_table_name, new_version)

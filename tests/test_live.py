@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 
+import pyarrow as pa
 import pytest
+from pyarrow import ipc
 
 SCHEMA = {
     "type": "object",
@@ -106,3 +109,57 @@ def test_activate_version_deletes_stale_rows(run_singer, schema, hard_delete):
 
     rows = schema.rows("people", "id, _sdc_deleted_at IS NOT NULL", order_by="id")
     assert rows == ([(1, False)] if hard_delete else [(1, False), (2, True)])
+
+
+def arrow_messages(path, table, *, keys=("id",)) -> str:
+    schema = {"type": "object", "properties": SCHEMA["properties"]}
+    lines = [
+        {
+            "type": "SCHEMA",
+            "stream": "people",
+            "schema": schema,
+            "key_properties": keys,
+        },
+        {
+            "type": "BATCH",
+            "stream": "people",
+            "encoding": {"format": "arrow"},
+            "manifest": [path.as_uri()],
+        },
+    ]
+    with path.open("wb") as f:
+        writer = ipc.new_file(f, table.schema)
+        writer.write_table(table)
+        writer.close()
+    return "\n".join(json.dumps(line) for line in lines) + "\n"
+
+
+def test_arrow_batch_is_upserted(run_singer, schema, tmp_path):
+    table = pa.table(
+        {
+            "id": [1, 2, 1],
+            "name": ["ann", "bob", "ann2"],
+            "score": [1.5, None, 2.5],
+            "active": [True, False, None],
+            "created": pa.array(
+                [datetime.datetime(2024, 1, 2, 3, 4, 5, tzinfo=datetime.UTC)] * 3,
+                type=pa.timestamp("ns", tz="UTC"),
+            ),
+            "tags": [["a", "b"], None, ["c"]],
+        },
+    )
+    path = tmp_path / "people.arrow"
+    run_singer(arrow_messages(path, table))
+    run_singer(arrow_messages(path, table))  # idempotent with keys
+
+    rows = schema.rows("people", "id, name, score, active, tags", order_by="id")
+    assert rows == [(1, "ann2", 2.5, None, '["c"]'), (2, "bob", None, False, None)]
+    assert schema.rows("people", "year(created)", order_by="id") == [(2024,), (2024,)]
+    assert not path.exists()  # consume-once manifest files are cleaned up
+
+
+def test_arrow_batch_is_appended_without_keys(run_singer, schema, tmp_path):
+    table = pa.table({"id": [1, 1], "name": ["a", "b"]})
+    run_singer(arrow_messages(tmp_path / "p.arrow", table, keys=[]))
+
+    assert schema.rows("people", "count(*)") == [(2,)]

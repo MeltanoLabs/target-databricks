@@ -6,6 +6,7 @@ from typing_extensions import TypedDict
 DEFAULT_AUTH_TYPE = "pat"
 DEFAULT_LOAD_METHOD = "upsert"
 DEFAULT_HARD_DELETE = False
+DEFAULT_CLEAN_UP_BATCH_FILES = True
 
 ALLOWED_AUTH_TYPES = ["pat", "oauth_m2m"]
 ALLOWED_LOAD_METHODS = ["upsert", "append-only", "overwrite"]
@@ -26,6 +27,7 @@ class SingerConfig(TypedDict, closed=False):
     auth_type: NotRequired[str]
     load_method: NotRequired[str]
     hard_delete: NotRequired[bool]
+    clean_up_batch_files: NotRequired[bool]
 
     # Optional settings
     access_token: NotRequired[str]
@@ -119,6 +121,16 @@ def get_config_jsonschema() -> dict[str, Any]:
             description=(
                 "On `ACTIVATE_VERSION`, delete stale rows instead of marking them "
                 "with `_sdc_deleted_at`."
+            ),
+        ),
+        th.Property(
+            "clean_up_batch_files",
+            th.BooleanType,
+            default=DEFAULT_CLEAN_UP_BATCH_FILES,
+            title="Clean Up Batch Files",
+            description=(
+                "Delete Arrow `BATCH` manifest files once they are loaded. These "
+                "files are consume-once, so this is safe to leave enabled."
             ),
         ),
         th.Property(
