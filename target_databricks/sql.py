@@ -170,6 +170,15 @@ def merge_sql(
     rows: Sequence[Mapping[str, t.Any]],
 ) -> tuple[str, Params]:
     select, params = _source_select(columns, rows)
+    return _merge_statement(table, columns, keys, select), params
+
+
+def _merge_statement(
+    table: str,
+    columns: Mapping[str, str],
+    keys: Sequence[str],
+    select: str,
+) -> str:
     on = " AND ".join(f"t.{quote_ident(k)} = s.{quote_ident(k)}" for k in keys)
     updates = ", ".join(
         f"t.{quote_ident(n)} = s.{quote_ident(n)}" for n in columns if n not in keys
@@ -180,7 +189,51 @@ def merge_sql(
     if updates:
         sql += f"WHEN MATCHED THEN UPDATE SET {updates} "
     sql += f"WHEN NOT MATCHED THEN INSERT ({names}) VALUES ({values})"
-    return sql, params
+    return sql
+
+
+def _staged_select(columns: Mapping[str, str], path: str) -> str:
+    """Build ``SELECT CAST(..) .. FROM parquet.`<path>``` for a staged file."""
+    projection = ", ".join(
+        f"CAST({quote_ident(name)} AS {typ}) AS {quote_ident(name)}"
+        for name, typ in columns.items()
+    )
+    return f"SELECT {projection} FROM parquet.{quote_ident(path)}"
+
+
+def insert_staged_sql(table: str, columns: Mapping[str, str], path: str) -> str:
+    names = ", ".join(quote_ident(n) for n in columns)
+    return f"INSERT INTO {table} ({names}) {_staged_select(columns, path)}"
+
+
+def merge_staged_sql(
+    table: str,
+    columns: Mapping[str, str],
+    keys: Sequence[str],
+    path: str,
+) -> str:
+    return _merge_statement(table, columns, keys, _staged_select(columns, path))
+
+
+def create_volume_sql(catalog: str | None, schema: str, volume: str) -> str:
+    return f"CREATE VOLUME IF NOT EXISTS {fq_name(catalog, schema, volume)}"
+
+
+def volume_path(catalog: str, schema: str, volume: str, filename: str) -> str:
+    """Path of a file in a Unity Catalog volume (unquoted, as ``PUT`` expects)."""
+    return f"/Volumes/{catalog}/{schema}/{volume}/{filename}"
+
+
+def put_sql(local_path: str, remote_path: str) -> str:
+    return f"PUT '{_lit(local_path)}' INTO '{_lit(remote_path)}' OVERWRITE"
+
+
+def remove_sql(remote_path: str) -> str:
+    return f"REMOVE '{_lit(remote_path)}'"
+
+
+def _lit(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("'", "\\'")
 
 
 def soft_delete_sql(table: str, version: int) -> str:

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import atexit
+import shutil
+import tempfile
 import threading
 import typing as t
 from typing import NotRequired
@@ -25,9 +27,13 @@ class _ConnectKwargs(TypedDict, closed=True):
     access_token: NotRequired[str]
     credentials_provider: NotRequired[t.Callable[[], t.Any]]
     catalog: NotRequired[str]
+    staging_allowed_local_path: NotRequired[str]
 
 
-def connect_kwargs(config: SingerConfig) -> _ConnectKwargs:
+def connect_kwargs(
+    config: SingerConfig,
+    staging_dir: str | None = None,
+) -> _ConnectKwargs:
     """Build ``databricks.sql.connect`` keyword arguments from target config."""
     kwargs: _ConnectKwargs = {
         "server_hostname": config["server_hostname"],
@@ -39,6 +45,9 @@ def connect_kwargs(config: SingerConfig) -> _ConnectKwargs:
     }
     if catalog := config.get("catalog"):
         kwargs["catalog"] = catalog
+    if staging_dir:
+        # Only files under this directory may be uploaded with ``PUT``.
+        kwargs["staging_allowed_local_path"] = staging_dir
 
     if config.get("auth_type", "pat") == "oauth_m2m":
         kwargs["credentials_provider"] = lambda: _service_principal_headers(config)
@@ -67,12 +76,23 @@ class DatabricksClient:
         self._config = config
         self._connection: t.Any = None
         self._lock = threading.Lock()
+        self._staging_dir: str | None = None
+        self._catalog: str | None = None
         self.overwritten_tables: set[str] = set()
         """Tables already truncated by this run (``overwrite`` load method)."""
 
+    @property
+    def staging_dir(self) -> str:
+        """Local directory that files uploaded to a volume must live in."""
+        if self._staging_dir is None:
+            self._staging_dir = tempfile.mkdtemp(prefix="target-databricks-")
+        return self._staging_dir
+
     def _get_connection(self) -> t.Any:
         if self._connection is None:
-            self._connection = dbsql.connect(**connect_kwargs(self._config))
+            self._connection = dbsql.connect(
+                **connect_kwargs(self._config, self.staging_dir),
+            )
             atexit.register(self.close)
         return self._connection
 
@@ -80,6 +100,17 @@ class DatabricksClient:
         if self._connection is not None:
             self._connection.close()
             self._connection = None
+        if self._staging_dir is not None:
+            shutil.rmtree(self._staging_dir, ignore_errors=True)
+            self._staging_dir = None
+
+    def current_catalog(self) -> str:
+        """Return the catalog in use (the configured one, else the default)."""
+        if self._catalog is None:
+            self._catalog = self._config.get("catalog") or str(
+                self.execute("SELECT current_catalog()")[0][0],
+            )
+        return self._catalog
 
     def execute(self, statement: str, params: Params | None = None) -> list[t.Any]:
         """Run a statement and return all rows (empty for non-queries)."""

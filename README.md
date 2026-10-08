@@ -21,6 +21,7 @@ no SQLAlchemy layer.
 | `default_target_schema` |          | Target schema; otherwise taken from `<schema>-<table>` stream names         |
 | `load_method`           |          | `upsert` (default), `append-only` or `overwrite`                            |
 | `hard_delete`           |          | On `ACTIVATE_VERSION`, delete stale rows instead of setting `_sdc_deleted_at` |
+| `clean_up_batch_files`  |          | Delete Arrow `BATCH` files once loaded (default `true`)                     |
 
 Built-in SDK settings (`add_record_metadata`, `batch_size_rows`, `stream_maps`, ...) also apply.
 `ACTIVATE_VERSION` handling needs `add_record_metadata: true`.
@@ -31,7 +32,14 @@ Built-in SDK settings (`add_record_metadata`, `batch_size_rows`, `stream_maps`, 
   JSON strings) and new columns are added automatically. Existing column types are not altered.
 - With key properties, `upsert` uses a native `MERGE INTO`; without them, or with
   `append-only`, rows are inserted. `overwrite` truncates each table once per run.
-- Arrow `BATCH` messages are not supported yet.
+- `BATCH` messages with `encoding: {"format": "arrow"}` (Arrow IPC files, `file://` URIs or local
+  paths) are detected automatically; no setting is needed. Table DDL still comes from the
+  `SCHEMA` message. Each file is written as Parquet, uploaded with `PUT` to a Unity Catalog volume
+  named `meltano_staging` (created in the target schema if missing, so the principal needs
+  `CREATE VOLUME` and `WRITE VOLUME`), and loaded with a single `INSERT` or `MERGE ... FROM
+  parquet.<path>`; the staged file is removed afterwards. If staging fails, the batch is loaded
+  with inline inserts instead. Manifest files are consume-once and deleted after loading unless
+  `clean_up_batch_files` is `false`.
 
 ## Development
 

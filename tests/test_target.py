@@ -30,7 +30,3 @@ def test_valid_configs():
             "client_secret": "s",
         },
     )
-
-
-def test_batch_capability_not_advertised():
-    assert "batch" not in {str(c) for c in TargetDatabricks.capabilities}

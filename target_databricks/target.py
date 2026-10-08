@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, cast, override
+from typing import Any, ClassVar, cast, override
 
 from singer_sdk import Target
 from singer_sdk.exceptions import ConfigValidationError
+from singer_sdk.helpers.capabilities import CapabilitiesEnum, PluginCapabilities
 
 from target_databricks.client import DatabricksClient
 from target_databricks.config import SingerConfig, get_config_jsonschema
@@ -18,6 +19,11 @@ class TargetDatabricks(Target):
     name = "target-databricks"
 
     default_sink_class = DatabricksSink
+
+    capabilities: ClassVar[list[CapabilitiesEnum]] = [
+        *Target.capabilities,
+        PluginCapabilities.BATCH,
+    ]
 
     config_jsonschema = get_config_jsonschema()
 

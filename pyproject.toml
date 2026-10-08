@@ -22,6 +22,7 @@ dependencies = [
     "databricks-sql-connector>=4",
     "databricks-sdk>=0.145.0",
     "typing-extensions>=4.16.0",
+    "pyarrow>=22",
 ]
 
 [project.scripts]
@@ -31,6 +32,7 @@ target-databricks = "target_databricks.target:TargetDatabricks.cli"
 dev = [
     "mypy>=2.3.0",
     "pre-commit>=4",
+    "pyarrow-stubs>=20.0.0.20260819",
     "pytest>=9",
     "pytest-xdist>=3.8.0",
     "ruff>=0.15",
