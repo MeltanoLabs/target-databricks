@@ -97,6 +97,7 @@ class DatabricksClient:
         return self._connection
 
     def close(self) -> None:
+        atexit.unregister(self.close)
         if self._connection is not None:
             self._connection.close()
             self._connection = None

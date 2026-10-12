@@ -40,6 +40,17 @@ class TargetDatabricks(Target):
         return self._client
 
     @override
+    def process_endofpipe(self) -> None:
+        # Close the SQL session while stdio and logging are still usable. Left to
+        # the ``atexit`` fallback, the CloseSession request runs during interpreter
+        # shutdown and logs "I/O operation on closed file".
+        try:
+            super().process_endofpipe()
+        finally:
+            if self._client is not None:
+                self._client.close()
+
+    @override
     def _validate_config(self, *, raise_errors: bool = True) -> list[str]:
         errors = super()._validate_config(raise_errors=False)
         auth_type = self.config.get("auth_type", "pat")
